@@ -122,19 +122,31 @@
   }
 
   function startScanner() {
-    if (scanner && scanner.isScanning) return;
+    async function startScanner() {
+  try {
+    const cameras = await Html5Qrcode.getCameras();
 
-    if (!scanner) scanner = new Html5Qrcode("reader");
+    if (!cameras || cameras.length === 0) {
+      alert("No camera detected. Please check your laptop camera.");
+      return;
+    }
 
-    scanner.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 250, height: 250 } },
+    html5QrCode = new Html5Qrcode("reader");
+
+    // Use the first camera detected by the laptop
+    await html5QrCode.start(
+      cameras[0].id,
+      {
+        fps: 10,
+        qrbox: 250
+      },
       onScanSuccess
-    ).then(function() {
-      showMessage("Camera ready. Scan a QR code.", "green");
-    }).catch(function(error) {
-      showMessage("Camera error: " + error, "#b3261e");
-    });
+    );
+
+  } catch (error) {
+    alert("Camera error: " + error);
+  }
+
   }
 
   function stopScanner() {
