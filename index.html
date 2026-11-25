@@ -1,0 +1,153 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>100-Person QR Attendance</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f3f6fa;
+      padding: 20px;
+      margin: 0;
+    }
+    main {
+      max-width: 520px;
+      margin: 25px auto;
+      background: white;
+      padding: 22px;
+      border-radius: 14px;
+    }
+    h2 { color: #174ea6; }
+    #reader { max-width: 420px; margin: 20px auto; }
+    #message { font-size: 19px; font-weight: bold; margin: 18px 0; }
+    #summary { font-size: 17px; margin: 18px 0; }
+    button {
+      padding: 13px 20px;
+      margin: 6px;
+      font-size: 17px;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+      background: #174ea6;
+      color: white;
+    }
+    button.stop { background: #555; }
+  </style>
+</head>
+<body>
+<main>
+  <h2>100-Person QR Attendance</h2>
+  <div id="reader"></div>
+  <div id="message">Ready to scan</div>
+  <div id="summary">Loading attendance...</div>
+  <button onclick="startScanner()">Start Scanner</button>
+  <button class="stop" onclick="stopScanner()">Stop Scanner</button>
+</main>
+
+<script>
+  const API_URL = "https://script.google.com/macros/s/AKfycbyE0HR-qaAZ7pnTXzk-Z69eilIfcvQxE7l-52XTfRVH66WFfKWJgsLyY1bd8dtHa2Wn/exec";
+
+  let scanner = null;
+  let busy = false;
+  let requestNumber = 0;
+
+  function showMessage(message, color) {
+    const el = document.getElementById("message");
+    el.textContent = message;
+    el.style.color = color || "#222";
+  }
+
+  function callAPI(action, id, handler) {
+    const callback = "attendanceCallback" + (++requestNumber);
+    const script = document.createElement("script");
+    const params = new URLSearchParams({
+      action: action,
+      callback: callback
+    });
+
+    if (id) params.set("id", id);
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      handler({ success: false, message: "Server timed out. Please try again." });
+    }, 15000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[callback];
+      script.remove();
+    }
+
+    window[callback] = function(result) {
+      cleanup();
+      handler(result);
+    };
+
+    script.onerror = function() {
+      cleanup();
+      handler({ success: false, message: "Could not contact attendance server." });
+    };
+
+    script.src = API_URL + "?" + params.toString();
+    document.body.appendChild(script);
+  }
+
+  function updateSummary() {
+    callAPI("summary", "", function(data) {
+      document.getElementById("summary").textContent =
+        "Total: " + data.total +
+        " | Present: " + data.present +
+        " | Absent: " + data.absent;
+    });
+  }
+
+  function onScanSuccess(decodedText) {
+    if (busy) return;
+    busy = true;
+
+    showMessage("Recording attendance...", "#174ea6");
+
+    callAPI("mark", decodedText.trim(), function(result) {
+      showMessage(
+        result.message,
+        result.success ? "green" : "#b3261e"
+      );
+      updateSummary();
+      setTimeout(function() { busy = false; }, 2500);
+    });
+  }
+
+  function startScanner() {
+    if (scanner && scanner.isScanning) return;
+
+    if (!scanner) scanner = new Html5Qrcode("reader");
+
+    scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      onScanSuccess
+    ).then(function() {
+      showMessage("Camera ready. Scan a QR code.", "green");
+    }).catch(function(error) {
+      showMessage("Camera error: " + error, "#b3261e");
+    });
+  }
+
+  function stopScanner() {
+    if (scanner && scanner.isScanning) {
+      scanner.stop().then(function() {
+        showMessage("Scanner stopped.", "#222");
+      }).catch(function(error) {
+        showMessage("Could not stop scanner: " + error, "#b3261e");
+      });
+    }
+  }
+
+  updateSummary();
+</script>
+</body>
+</html>
